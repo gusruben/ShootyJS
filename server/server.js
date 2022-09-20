@@ -42,18 +42,28 @@ wss.on('connection', (ws) => {
 			
 			ws.id = uuid.v4()
 			ws.send(JSON.stringify({type: "uuid", mes: {id: ws.id, team: ws.team}}))
+			
+			console.log(`(${ws.id}) Connected`)
 		} else {
 			ws.close()
 			return
 		}
 		
 		if (players.length == maxPlayers) {
+			console.log("Starting game!")
+			
 			for (const player of players) {
 				player.x = 0
 				player.y = 0
 				player.rot = 0
-
-				player.send(JSON.stringify({type: "start", mes: players.filter(a => a!=player).map(a => ({id: a.id, team: a.team, map: map}))}))
+				
+				player.send(JSON.stringify({
+					type: "start", 
+					mes: {
+						players: players.filter(a => a!=player).map( a => ({id: a.id, team: a.team, name: a.name}) ),
+						map: map
+					}
+				}))
 			}
 			
 			serverState = "playing"
@@ -65,6 +75,8 @@ wss.on('connection', (ws) => {
 			for (const player of players) {
 				player.send(JSON.stringify({type: "waiting for map"}))
 			}
+			
+			console.log("All players connected, waiting to load map...")
 		}
 	} else {
 		ws.close()
@@ -83,6 +95,12 @@ wss.on('connection', (ws) => {
 			ws.y = mes.y
 			ws.rot = mes.rot
 		}
+		else if (type == "name") {
+			if (!ws.name) {
+				ws.name = mes
+				console.log(`(${ws.id}) Set name to ${ws.name}`)
+			}
+		}
 		else if (type == "shot") {
 			for (const player of players) {
 				player.send(JSON.stringify(parsed))
@@ -94,10 +112,15 @@ wss.on('connection', (ws) => {
 		players.splice(players.indexOf(ws), 1)
 		ws.team == "red" ? reds-- : blues--
 		
+		console.log(`(${ws.name}) Left the game`)
+		
 		if (players.length < maxPlayers) {
 			serverState = "waiting for players"
 			for (const player of players) {
 				player.send(JSON.stringify({type: "player left", mes: players.length}))
+			}
+			if (serverState == "playing") {
+				console.log("Ending game due to loss of required players")
 			}
 		}
 	})

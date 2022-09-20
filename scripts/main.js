@@ -40,7 +40,7 @@ const playerWait = {
 	font: "bold 40px system-ui",
 	disabled: true
 }
-const testBox = new TextBox(100, 320, 50, "testdnaskda!!!", renderer)
+const nameBox = new TextBox(100, 320, 50, 300, "Name...", renderer)
 const mapEditorButton = new Button(100, 260, 50, "Map Editor", renderer, () => {
 	renderer.switchScene("MapEditor")
 })
@@ -50,13 +50,15 @@ const cancelStartButton = new Button(100, 260, 50, "Cancel", renderer, () => {
 cancelStartButton.disabled = true
 cancelStartButton.label.disabled = true
 const startButton = new Button(100, 200, 50, "Start", renderer, () => {
+	if (nameBox.value == "") {return}
+	
 	ws = new WebSocket("ws://localhost:3000")
 	ws.addEventListener("message", (e) => {
 		let raw = JSON.parse(e.data)
 		let type = raw.type
 		let mes = raw.mes
 		
-		if (type == "player update") {
+		if (type == "player update") {			
 			players[mes.id].x = mes.x
 			players[mes.id].y = mes.y
 			players[mes.id].weapon.rotation = mes.rot
@@ -110,16 +112,17 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 		}
 		else if (type == "start") {
 			for (let i=0; i<maxPlayers-1; i++) {
-				players[mes[i].id] = unasignedPlayers[i]
-				unasignedPlayers[i].id = mes[i].id
-				unasignedPlayers[i].team = mes[i].team
+				players[mes.players[i].id] = unasignedPlayers[i]
+				unasignedPlayers[i].id = mes.players[i].id
+				unasignedPlayers[i].team = mes.players[i].team
+				unasignedPlayers[i].nametag.text = mes.players[i].name
 				
 				if (unasignedPlayers[i].team != player.team) {
 					unasignedPlayers[i].weapon.color = "#94d2bd"
 					unasignedPlayers[i].color = "#0a9396"
 				}
 				
-				renderer.addToScene("Game", players[mes[i].id])
+				renderer.addToScene("Game", players[mes.players[i].id])
 			}
 			renderer.switchScene("Game")
 		}
@@ -133,6 +136,8 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 			player.team = mes.team
 		} else if (type == "waiting for map") {
 			playerWait.text = `${maxPlayers}/${maxPlayers} Waiting for Server to Load Map...`
+		} else if (type == "name") {
+			players[mes.id].name = mes.name
 		}
 	})
 	ws.addEventListener("open", () => {
@@ -143,6 +148,10 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 		mapEditorButton.label.disabled = true
 		cancelStartButton.disabled = false
 		cancelStartButton.label.disabled = false
+		nameBox.disable()
+		
+		player.nametag.text = nameBox.value
+		ws.send(JSON.stringify({type: "name", mes: nameBox.value}))
 		
 	})
 	ws.addEventListener("close", () => {
@@ -154,6 +163,7 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 		mapEditorButton.label.disabled = false
 		cancelStartButton.disabled = true
 		cancelStartButton.label.disabled = true
+		nameBox.enable()
 	})
 })
 const crosshair = {
@@ -176,6 +186,12 @@ player.weapon = {
 	z: 3,
 	lastShotTick: -Infinity
 }
+player.nametag = {
+	x: 0,
+	y: 0,
+	type: "text",
+	text: ""
+}
 for (const unaPlayer of unasignedPlayers) {
 	unaPlayer.weapon = {
 		x: 0,
@@ -188,17 +204,25 @@ for (const unaPlayer of unasignedPlayers) {
 		z: 3,
 		lastShotTick: -Infinity
 	}
+	unaPlayer.nametag = {
+		x: 0,
+		y: 0,
+		type: "text",
+		text: ""
+	}
 	
 	renderer.addToScene("Game", unaPlayer.weapon)
+	renderer.addToScene("Game", unaPlayer.nametag)
 }
 
+renderer.addToScene("Game", player.nametag)
 renderer.addToScene("Game", player.weapon)
 renderer.addToScene("Game", player)
 renderer.addToScene("MainMenu", title)
 renderer.addToScene("MainMenu", startButton)
 renderer.addToScene("MainMenu", mapEditorButton)
 renderer.addToScene("MainMenu", cancelStartButton)
-renderer.addToScene("MainMenu", testBox)
+renderer.addToScene("MainMenu", nameBox)
 renderer.addToScene("Game", crosshair)
 renderer.addToScene("MainMenu", playerWait)
 
@@ -341,7 +365,11 @@ function loop() {
 		ws.send(JSON.stringify({type: "update move", mes: {x: player.x, y: player.y, rot: player.weapon.rotation}}))
 		
 		for (const uid in players) {
+			if (!players[uid].nametag) {continue}
+			
 			Util.lerpObject(players[uid].weapon, players[uid], 0.3)
+			players[uid].nametag.x = players[uid].x - renderer.measureText(players[uid].nametag).width/2
+			players[uid].nametag.y = -players[uid].y - 50
 		}
 		
 		Util.pointToObject(player.weapon, Util.uiToGamePosition(crosshair, renderer))

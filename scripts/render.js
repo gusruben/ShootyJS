@@ -107,6 +107,9 @@ class Renderer {
 					this.ctx.arcTo(0, 			0,   		obj.sizeX, 	0, 			obj.borderRadius)
 					this.ctx.closePath()
 					this.ctx.fill()
+					if (obj.stroke) {
+						this.ctx.stroke()
+					}
 				}
 				else {
 					if (obj.isUI) {
@@ -171,7 +174,12 @@ class Renderer {
 		
 		if (obj.uiType) {
 			this.scenes[name].uiManager.UIElements.push(obj)
-			this.scenes[name].objs.push(obj.label)
+			if (obj.uiType == "button") {
+				this.scenes[name].objs.push(obj.label)
+			} else if (obj.uiType == "textbox") {
+				this.scenes[name].objs.push(obj.label)
+				this.scenes[name].objs.push(obj.textHead)
+			}
 		}
 		if (obj.type == "line") {
 			obj.len = Math.sqrt((obj.x2-obj.x1)**2 + (obj.y2-obj.y1)**2)

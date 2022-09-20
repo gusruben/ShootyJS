@@ -19,13 +19,13 @@ class UIManager {
 				input.mouse.y > obj.y &&
 				input.mouse.y < obj.y + obj.sizeY
 			) {
-				obj.color = "#ffffff77"
-				
 				if (obj.uiType == "button") {
 					document.body.style.cursor = "pointer"
+					obj.color = "#ffffff77"
 				}
 				if (obj.uiType == "textbox") {
 					document.body.style.cursor = "text"
+					obj.color = "#ffffff55"
 				}
 			} else {
 				obj.color = "#ffffff33"
@@ -96,10 +96,11 @@ class Button {
 }
 
 class TextBox {
-	constructor(x, y, height, placeholderText, renderer) {
+	constructor(x, y, height, width, placeholderText, renderer) {
 		this.x = x
 		this.y = y
 		this.sizeY = height
+		this.sizeX = width
 		this.isUI = true
 		this.color = "#ffffff66"
 		this.type = "rect"
@@ -109,10 +110,25 @@ class TextBox {
 		this.focused = false
 		this.value = ""
 		
+		window.addEventListener('keydown', (e) => {
+			if (this.focused && e.key.length == 1 && /[a-zA-Z0-9]/.test(e.key)) {
+				this.value += e.key
+				this.label.text += e.key
+				this.textHead.x1 = x + renderer.measureText(this.label).width + 10
+				this.textHead.x2 = x + renderer.measureText(this.label).width + 10
+			} else if (this.focused && e.key == "Backspace") {
+				this.value = this.value.slice(0, -1)
+				this.label.text = this.label.text.slice(0, -1)
+				this.textHead.x1 = x + renderer.measureText(this.label).width + 10
+				this.textHead.x2 = x + renderer.measureText(this.label).width + 10
+			}
+		})
 		
 		this.onFocus = (e) => {
 			this.focused = true
 			this.label.color = "#ee9b00"
+			this.stroke = "#ee9b00"
+			this.textHead.disabled = false
 			
 			if (this.value === "") {
 				this.label.text = ""
@@ -120,10 +136,12 @@ class TextBox {
 		}
 		this.onUnfocus = (e) => {
 			this.focused = false
+			this.stroke = undefined
+			this.textHead.disabled = true
 			
 			if (this.value === "") {
 				this.label.color = "#ee9b0033"
-				this.label.text = placeholderText 
+				this.label.text = placeholderText
 			}
 		}
 		
@@ -138,7 +156,26 @@ class TextBox {
 			color: "#ee9b0033",
 			z: 2
 		}
-
-		this.sizeX = renderer.measureText(this.label).width + 12
+		this.textHead = {
+			type: "line",
+			stroke: "white",
+			width: 3,
+			x1: x+10,
+			y1: -y-5,
+			x2: x+10,
+			y2: -y-height+5,
+			disabled: true,
+			isUI: true,
+			z: 3,
+		}
+		
+		this.disable = () => {
+			this.disabled = true
+			this.label.disabled = true
+		}
+		this.enable = () => {
+			this.disabled = false
+			this.label.disabled = false
+		}
 	}
 }
