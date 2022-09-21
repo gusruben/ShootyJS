@@ -1,5 +1,6 @@
 const ws = require('ws')
 const uuid = require('uuid')
+const fs = require('fs');
 const readline = require('readline')
 
 const wss = new ws.WebSocketServer({ host: "localhost", port: 3000 })
@@ -11,8 +12,30 @@ rl.on('line', (input) => {
 	let parsed = input.split(' ')
 	let command = parsed[0]
 	
-	if (command == "loadmap") {
-		
+	if (command == "map") {
+		fs.readFile(`maps/${parsed[1]}.tmf`, 'utf8', (err, data) => {
+			map = data
+			
+			if (players.length == maxPlayers && map) {
+				console.log("Starting game!")
+				
+				for (const player of players) {
+					player.x = 0
+					player.y = 0
+					player.rot = 0
+					
+					player.send(JSON.stringify({
+						type: "start", 
+						mes: {
+							players: players.filter(a => a!=player).map( a => ({id: a.id, team: a.team, name: a.name}) ),
+							map: map
+						}
+					}))
+				}
+				
+				serverState = "playing"
+			}
+		})
 	}
 })
 
@@ -28,61 +51,6 @@ var blues = 0
 var reds = 0
 
 wss.on('connection', (ws) => {
-	if (serverState == "waiting for players") {
-		if (players.length < maxPlayers) {
-			players.push(ws)
-			
-			if (reds > blues) {
-				ws.team = "blue"
-				blues++
-			} else {
-				ws.team = "red"
-				reds++
-			}
-			
-			ws.id = uuid.v4()
-			ws.send(JSON.stringify({type: "uuid", mes: {id: ws.id, team: ws.team}}))
-			
-			console.log(`(${ws.id}) Connected`)
-		} else {
-			ws.close()
-			return
-		}
-		
-		if (players.length == maxPlayers) {
-			console.log("Starting game!")
-			
-			for (const player of players) {
-				player.x = 0
-				player.y = 0
-				player.rot = 0
-				
-				player.send(JSON.stringify({
-					type: "start", 
-					mes: {
-						players: players.filter(a => a!=player).map( a => ({id: a.id, team: a.team, name: a.name}) ),
-						map: map
-					}
-				}))
-			}
-			
-			serverState = "playing"
-		} else if (players.length < maxPlayers) {
-			for (const player of players) {
-				player.send(JSON.stringify({type: "player joined", mes: players.length}))
-			}
-		} else if (!map) {
-			for (const player of players) {
-				player.send(JSON.stringify({type: "waiting for map"}))
-			}
-			
-			console.log("All players connected, waiting to load map...")
-		}
-	} else {
-		ws.close()
-		return
-	}
-	
 	ws.on('message', (raw) => {
 		parsed = JSON.parse(raw)
 		let type = parsed.type
@@ -95,10 +63,61 @@ wss.on('connection', (ws) => {
 			ws.y = mes.y
 			ws.rot = mes.rot
 		}
-		else if (type == "name") {
-			if (!ws.name) {
-				ws.name = mes
-				console.log(`(${ws.id}) Set name to ${ws.name}`)
+		else if (type == "join") {			
+			if (serverState == "waiting for players") {
+				if (players.length < maxPlayers) {
+					players.push(ws)
+					
+					if (reds > blues) {
+						ws.team = "blue"
+						blues++
+					} else {
+						ws.team = "red"
+						reds++
+					}
+					
+					ws.id = uuid.v4()
+					ws.name = mes.name
+					ws.send(JSON.stringify({type: "uuid", mes: {id: ws.id, team: ws.team}}))
+					
+					console.log(`(${mes.name}) Connected`)
+				} else {
+					ws.close()
+					return
+				}
+				
+				if (players.length == maxPlayers && map) {
+					console.log("Starting game!")
+					
+					for (const player of players) {
+						player.x = 0
+						player.y = 0
+						player.rot = 0
+						
+						player.send(JSON.stringify({
+							type: "start", 
+							mes: {
+								players: players.filter(a => a!=player).map( a => ({id: a.id, team: a.team, name: a.name}) ),
+								map: map
+							}
+						}))
+					}
+					
+					serverState = "playing"
+				} else if (players.length < maxPlayers) {
+					for (const player of players) {
+						player.send(JSON.stringify({type: "player joined", mes: players.length}))
+					}
+				} else if (!map) {
+					for (const player of players) {
+						player.send(JSON.stringify({type: "waiting for map"}))
+					}
+					
+					console.log("All players connected, waiting to load map...")
+				}
+			} else {
+				ws.close()
+				return
 			}
 		}
 		else if (type == "shot") {
