@@ -13,7 +13,7 @@ rl.on('line', (input) => {
 	let command = parsed[0]
 	
 	if (command == "map") {
-		fs.readFile(`maps/${parsed[1]}.tmf`, 'utf8', (err, data) => {
+		fs.readFile(`${__dirname}/maps/${parsed[1]}.tmf`, 'utf8', (err, data) => {
 			map = data
 			
 			if (players.length == maxPlayers && map) {
