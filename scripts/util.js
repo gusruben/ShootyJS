@@ -93,4 +93,83 @@ class Util {
 	static snap(a, s) {
 		return Math.round(a/s)*s
 	}
+	static LZWcompress(uncompressed)
+    {
+        let dictionary = {};
+        for (let i = 0; i < 256; i++)
+        {
+            dictionary[String.fromCharCode(i)] = i;
+        }
+        
+        let word = '';
+        let result = [];
+        let dictSize = 256;
+        
+        for (let i = 0, len = uncompressed.length; i < len; i++)
+        {
+            let curChar = uncompressed[i];
+            let joinedWord = word + curChar;
+
+            if (dictionary.hasOwnProperty(joinedWord)) 
+            {
+                word = joinedWord;
+            }
+            else
+            {
+                result.push(dictionary[word]);
+                dictionary[joinedWord] = dictSize++;
+                word = curChar;
+            }
+        }
+        
+        if (word !== '')
+        {
+            result.push(dictionary[word]);
+        }
+        
+        return result;
+    }
+	static LZWdecompress(compressed)
+    {
+        let dictionary = {};
+        for (let i = 0; i < 256; i++)
+        {
+            dictionary[i] = String.fromCharCode(i);
+        }
+        
+        let word = String.fromCharCode(compressed[0]);
+        let result = word;
+        let entry = '';
+        let dictSize = 256;
+        
+        for (let i = 1, len = compressed.length; i < len; i++)
+        {
+            let curNumber = compressed[i];
+            
+            if (dictionary[curNumber] !== undefined)
+            {
+                entry = dictionary[curNumber];
+            }
+            else
+            {
+                if (curNumber === dictSize)
+                {
+                    entry = word + word[0];
+                }
+                else
+                {
+                    throw 'Error in processing';
+                    return null;
+                }
+            }
+            
+            result += entry;
+            
+            dictionary[dictSize++] = word + entry[0];
+            
+            word = entry;
+        }
+        
+        return result;
+    }
 }

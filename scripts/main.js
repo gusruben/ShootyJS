@@ -20,6 +20,7 @@ renderer.switchScene("MainMenu")
 const preformanceMode = false
 
 var ws
+var map
 
 const title = {
 	type: "text",
@@ -111,6 +112,13 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 			playerWait.text = `${mes}/${maxPlayers} Waiting for Players...`
 		}
 		else if (type == "start") {
+			map = JSON.parse(Util.LZWdecompress(mes.map.split(",")))
+			for (const obj of map) {
+				if (obj.mapType == "block") {
+					renderer.addToScene("Game", obj)
+				}
+			}
+
 			for (let i=0; i<maxPlayers-1; i++) {
 				players[mes.players[i].id] = unasignedPlayers[i]
 				unasignedPlayers[i].id = mes.players[i].id
@@ -124,7 +132,15 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 				
 				renderer.addToScene("Game", players[mes.players[i].id])
 			}
+
+			for (const id in players) {
+				let spawn = map.filter(a => a.mapType == `${players[id].team} spawn`)[mes.spawns[id]]
+				players[id].x = spawn.x
+				players[id].y = spawn.y
+			}
+			
 			renderer.switchScene("Game")
+			renderer.activeScene.cam = {x: player.x, y: player.y}
 		}
 		else if (type == "player left") {
 			renderer.switchScene("MainMenu")
@@ -151,7 +167,7 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 		nameBox.disable()
 		
 		player.nametag.text = nameBox.value
-		ws.send(JSON.stringify({type: "name", mes: nameBox.value}))
+		ws.send(JSON.stringify({type: "join", mes: {name: nameBox.value}}))
 		
 	})
 	ws.addEventListener("close", () => {
@@ -190,7 +206,9 @@ player.nametag = {
 	x: 0,
 	y: 0,
 	type: "text",
-	text: ""
+	text: "",
+	font: "bold 20px system-ui",
+	z: 50
 }
 for (const unaPlayer of unasignedPlayers) {
 	unaPlayer.weapon = {
@@ -208,7 +226,9 @@ for (const unaPlayer of unasignedPlayers) {
 		x: 0,
 		y: 0,
 		type: "text",
-		text: ""
+		text: "",
+		font: "bold 20px system-ui",
+		z: 50
 	}
 	
 	renderer.addToScene("Game", unaPlayer.weapon)
@@ -240,38 +260,106 @@ renderer.addPostProcessing("Game", (imageData) => {
 	}	
 })
 
-const map = [
-	{
-		x: 30,
-		y: 30,
-		sizeX: 100,
-		sizeY: 100,
-		z: 0,
-		type: "rect",
-		color: "#00374d"
-	}
-]
-
-for (const obj of map) {
-	renderer.addToScene("Game", obj)
-}
-
 var lastEditorDownPos = {x: 0, y: 0}
 var editorDown = false
 var dragging = false
 var mapEditorElements = []
 var mapEditorSelected
 var placingBlockHighlight = {type: "rect", x: 0, y: 0, sizeX: 0, sizeY: 0, color: "#00374d77", disabled: true, z: 10}
+var placingSpawnHighlight = {type: "rect", x: 0, y: 0, sizeX: 20, sizeY: 45, disabled: true, z: 10}
+var placingSpawn = false
+var readyToPlaceSpawn = false
+var placingSpawnType
 renderer.addToScene("MapEditor", placingBlockHighlight)
+renderer.addToScene("MapEditor", placingSpawnHighlight)
 const snap = 50
 
 renderer.addToScene("MapEditor", new Button(10, 10, 30, "Back", renderer, () => {
 	renderer.switchScene("MainMenu")
 }))
+renderer.addToScene("MapEditor", new Button(10, 50, 30, "Save", renderer, () => {
+	let compressed = Util.LZWcompress(JSON.stringify(mapEditorElements))
+	
+	let file = new Blob([compressed])
+	let a = document.createElement("a")	
+	let url = URL.createObjectURL(file)
+	a.href = url
+	a.download = "map.tmf"
+	document.body.appendChild(a)
+	a.click()
+	setTimeout(function() {
+		document.body.removeChild(a)
+		window.URL.revokeObjectURL(url) 
+	}, 0)
+}))
+renderer.addToScene("MapEditor", new Button(10, 90, 30, "Load", renderer, () => {
+	let input = document.createElement('input')
+	input.type = 'file'
+	
+	input.onchange = e => { 
+		let file = e.target.files[0]
+		let reader = new FileReader()
+		reader.readAsText(file, 'UTF-8')
+
+		reader.onload = readerEvent => {
+			for (const obj of mapEditorElements) {
+				renderer.removeFromScene(obj)
+			}
+			
+			mapEditorElements = JSON.parse(Util.LZWdecompress(readerEvent.target.result.split(",")))
+			
+			for (const obj of mapEditorElements) {
+				renderer.addToScene("MapEditor", obj)
+			}
+		}
+	}
+	
+	input.click()
+}))
+renderer.addToScene("MapEditor", new Button(10, 130, 30, "Red Spawn", renderer, () => {
+	if (placingSpawn) {return}
+	
+	placingSpawnHighlight.disabled = false
+	readyToPlaceSpawn = true
+	placingSpawnType = "red"
+	placingSpawnHighlight.color = "#ee9b0077"
+}))
+renderer.addToScene("MapEditor", new Button(10, 170, 30, "Blue Spawn", renderer, () => {
+	if (placingSpawn) {return}
+	
+	placingSpawnHighlight.disabled = false
+	readyToPlaceSpawn = true
+	placingSpawnType = "blue"
+	placingSpawnHighlight.color = "#0a939677"
+}))
+
+renderer.addToScene("MapEditor", {
+	type: "line",
+	x1: 0,
+	x2: 0,
+	y1: 10000,
+	y2: -10000,
+	width: 5,
+	z: 30,
+	color: "#ffffff88"
+})
+renderer.addToScene("MapEditor", {
+	type: "line",
+	x1: 10000,
+	x2: -10000,
+	y1: 0,
+	y2: 0,
+	width: 5,
+	z: 30,
+	color: "#ffffff88"
+})
 
 window.addEventListener("mousedown", (e) => {
 	if (renderer.scene == "MapEditor") {
-		lastEditorDownPos = {x: Util.snap(e.clientX, snap), y: Util.snap(e.clientY, snap)}
+		if (e.clientX < 100) {return}
+		
+		let gamePos = Util.uiToGamePosition({x: e.clientX, y: -e.clientY}, renderer)
+		lastEditorDownPos = {x: Util.snap(gamePos.x, snap), y: Util.snap(gamePos.y, snap)}
 		editorDown = true
 		dragging = false
 		mapEditorSelected ? mapEditorSelected.color = "#00374d" : 0
@@ -280,14 +368,17 @@ window.addEventListener("mousedown", (e) => {
 })
 window.addEventListener("mousemove", (e) => {
 	if (renderer.scene == "MapEditor") {
+		if (e.clientX < 100) {return}
+		
 		if (editorDown && !dragging && Math.sqrt((e.clientX-lastEditorDownPos.x)**2+(e.clientY-lastEditorDownPos.y)**2) > snap/2) {
 			dragging = true
 			placingBlockHighlight.disabled = false
 		}
 		if (editorDown && dragging) {
-			let sizeX = Math.abs(Util.snap(e.clientX, snap) - lastEditorDownPos.x)
-			let sizeY = Math.abs(Util.snap(e.clientY, snap) - lastEditorDownPos.y)
-			let pos = Util.uiToGamePosition({x: Math.min(lastEditorDownPos.x, Util.snap(e.clientX, snap)) + sizeX/2, y: -Math.min(lastEditorDownPos.y, Util.snap(e.clientY, snap)) - sizeY/2}, renderer)
+			let gamePos = Util.uiToGamePosition({x: e.clientX, y: -e.clientY}, renderer)
+			let sizeX = Math.abs(Util.snap(gamePos.x, snap) - lastEditorDownPos.x)
+			let sizeY = Math.abs(Util.snap(gamePos.y, snap) - lastEditorDownPos.y)
+			let pos = {x: Math.min(lastEditorDownPos.x, Util.snap(gamePos.x, snap)) + sizeX/2, y: Math.min(lastEditorDownPos.y, Util.snap(gamePos.y, snap)) + sizeY/2}
 			
 			placingBlockHighlight.x = pos.x
 			placingBlockHighlight.y = pos.y
@@ -298,23 +389,48 @@ window.addEventListener("mousemove", (e) => {
 })
 window.addEventListener("mouseup", (e) => {
 	if (renderer.scene == "MapEditor") {
+		let gamePos = Util.uiToGamePosition({x: e.clientX, y: -e.clientY}, renderer)
+		
 		if (!dragging) {
-			mapEditorSelected ? mapEditorSelected.color = "#00374d" : 0
-			mapEditorSelected = undefined
-			for (const obj of mapEditorElements) {
-				if (Util.pointInRect(Util.uiToGamePosition({x: e.clientX, y: -e.clientY}, renderer), obj)) {
-					mapEditorSelected = obj
-					obj.color = "#77374d"
-					break
+			if (placingSpawn) {
+				let play = {
+					type: "rect",
+					mapType: `${placingSpawnType} spawn`,
+					sizeX: 20,
+					sizeY: 45,
+					x: Util.snap(gamePos.x, snap),
+					y: Util.snap(gamePos.y, snap),
+					color: placingSpawnType == "red" ? "#ee9b00" : "#0a9396"
+				}
+				
+				placingSpawnHighlight.disabled = true
+				placingSpawn = false
+				renderer.addToScene("MapEditor", play)
+				mapEditorElements.push(play)
+			} else {
+				if (readyToPlaceSpawn) {
+					placingSpawn = true
+					readyToPlaceSpawn = false
+				} else {
+					mapEditorSelected ? mapEditorSelected.color = "#00374d" : 0
+					mapEditorSelected = undefined
+					for (const obj of mapEditorElements) {
+						if (Util.pointInRect(gamePos, obj)) {
+							mapEditorSelected = obj
+							obj.color = "#77374d"
+							break
+						}
+					}
 				}
 			}
 		} else {
-			let sizeX = Math.abs(Util.snap(e.clientX, snap) - lastEditorDownPos.x)
-			let sizeY = Math.abs(Util.snap(e.clientY, snap) - lastEditorDownPos.y)
-			let pos = Util.uiToGamePosition({x: Math.min(lastEditorDownPos.x, Util.snap(e.clientX, snap)) + sizeX/2, y: -Math.min(lastEditorDownPos.y, Util.snap(e.clientY, snap)) - sizeY/2}, renderer)
+			let sizeX = Math.abs(Util.snap(gamePos.x, snap) - lastEditorDownPos.x)
+			let sizeY = Math.abs(Util.snap(gamePos.y, snap) - lastEditorDownPos.y)
+			let pos = {x: Math.min(lastEditorDownPos.x, Util.snap(gamePos.x, snap)) + sizeX/2, y: Math.min(lastEditorDownPos.y, Util.snap(gamePos.y, snap)) + sizeY/2}
 			
 			let block = {
 				type: "rect",
+				mapType: "block",
 				x: pos.x,
 				y: pos.y,
 				sizeX: sizeX,
@@ -344,7 +460,7 @@ window.addEventListener("mouseup", (e) => {
 })
 window.addEventListener("keydown", e => {
 	if (renderer.scene == "MapEditor") {
-		if (e.keyCode = 8 || e.keyCode == 46) {
+		if (e.keyCode === 8 || e.keyCode === 46) {
 			if (!mapEditorSelected) {return}
 			
 			renderer.removeFromScene(mapEditorSelected)
@@ -360,20 +476,22 @@ function loop() {
 		
 		player.handleMovement(input, renderer.dt)
 		for (const obj of map) {
-			player.handleCollision(obj)
+			if (obj.mapType == "block") {
+				player.handleCollision(obj)
+			}
 		}
 		ws.send(JSON.stringify({type: "update move", mes: {x: player.x, y: player.y, rot: player.weapon.rotation}}))
 		
 		for (const uid in players) {
 			if (!players[uid].nametag) {continue}
 			
-			Util.lerpObject(players[uid].weapon, players[uid], 0.3)
+			Util.lerpObject(players[uid].weapon, players[uid], 0.4)
 			players[uid].nametag.x = players[uid].x - renderer.measureText(players[uid].nametag).width/2
-			players[uid].nametag.y = -players[uid].y - 50
+			players[uid].nametag.y = -players[uid].y - 45
 		}
 		
 		Util.pointToObject(player.weapon, Util.uiToGamePosition(crosshair, renderer))
-		Util.lerpObject(renderer.activeScene.cam, player, 0.02)
+		Util.lerpObject(renderer.activeScene.cam, player, 0.05)
 		
 		if (input.keys[32] && renderer.tick - player.weapon.lastShotTick > 7) {	
 			player.weapon.lastShotTick = renderer.tick
@@ -394,6 +512,8 @@ function loop() {
 			let hitDis = Infinity
 			
 			for (const obj of map) {
+				if (obj.mapType != "block") {continue}
+
 				let res = Util.lineRectIntersect(tracer, obj)
 				
 				if (res.hit) {
@@ -414,6 +534,23 @@ function loop() {
 		}
 		
 		document.body.style.cursor = "none"
+	} else if (renderer.scene == "MapEditor") {
+		if (input.keys[87]) {
+			renderer.activeScene.cam.y += 10
+		}
+		if (input.keys[83]) {
+			renderer.activeScene.cam.y -= 10
+		}
+		if (input.keys[68]) {
+			renderer.activeScene.cam.x += 10
+		}
+		if (input.keys[65]) {
+			renderer.activeScene.cam.x -= 10
+		}
+		
+		let pos = Util.uiToGamePosition({x: input.mouse.x, y: -input.mouse.y}, renderer)
+		placingSpawnHighlight.x = Util.snap(pos.x, snap)
+		placingSpawnHighlight.y = Util.snap(pos.y, snap)
 	}
 	
 	renderer.render()

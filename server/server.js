@@ -17,23 +17,7 @@ rl.on('line', (input) => {
 			map = data
 			
 			if (players.length == maxPlayers && map) {
-				console.log("Starting game!")
-				
-				for (const player of players) {
-					player.x = 0
-					player.y = 0
-					player.rot = 0
-					
-					player.send(JSON.stringify({
-						type: "start", 
-						mes: {
-							players: players.filter(a => a!=player).map( a => ({id: a.id, team: a.team, name: a.name}) ),
-							map: map
-						}
-					}))
-				}
-				
-				serverState = "playing"
+				startGame()
 			}
 		})
 	}
@@ -49,6 +33,31 @@ var map
 const maxPlayers = 4
 var blues = 0
 var reds = 0
+
+function startGame() {
+	console.log("Starting game!")
+	
+	let spawns = {}
+	players.filter(a => a.team == "blue").map((a, index) => {spawns[a.id] = index})
+	players.filter(a => a.team == "red").map((a, index) => {spawns[a.id] = index})
+
+	for (const player of players) {
+		player.x = 0
+		player.y = 0
+		player.rot = 0
+		
+		player.send(JSON.stringify({
+			type: "start", 
+			mes: {
+				players: players.filter(a => a!=player).map( a => ({id: a.id, team: a.team, name: a.name}) ),
+				map: map,
+				spawns: spawns
+			}
+		}))
+	}
+	
+	serverState = "playing"
+}
 
 wss.on('connection', (ws) => {
 	ws.on('message', (raw) => {
@@ -87,23 +96,7 @@ wss.on('connection', (ws) => {
 				}
 				
 				if (players.length == maxPlayers && map) {
-					console.log("Starting game!")
-					
-					for (const player of players) {
-						player.x = 0
-						player.y = 0
-						player.rot = 0
-						
-						player.send(JSON.stringify({
-							type: "start", 
-							mes: {
-								players: players.filter(a => a!=player).map( a => ({id: a.id, team: a.team, name: a.name}) ),
-								map: map
-							}
-						}))
-					}
-					
-					serverState = "playing"
+					startGame()
 				} else if (players.length < maxPlayers) {
 					for (const player of players) {
 						player.send(JSON.stringify({type: "player joined", mes: players.length}))
@@ -127,7 +120,7 @@ wss.on('connection', (ws) => {
 		}
 	})
 	
-	ws.on('close', (raw) => {
+	ws.on('close', () => {
 		players.splice(players.indexOf(ws), 1)
 		ws.team == "red" ? reds-- : blues--
 		
