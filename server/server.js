@@ -114,7 +114,7 @@ var playersById = {}
 
 var map
 
-const maxPlayers = 4
+const maxPlayers = 12
 var blues = 0
 var reds = 0
 

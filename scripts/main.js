@@ -5,7 +5,7 @@ const renderer = new Renderer(ctx, canvas)
 
 const input = new Input()
 
-const maxPlayers = 4
+const maxPlayers = 12
 
 const player = new Player()
 var unasignedPlayers = []
