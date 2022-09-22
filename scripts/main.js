@@ -26,7 +26,7 @@ const title = {
 	type: "text",
 	x: 100,
 	y: 100,
-	text: "Placeholder Name", 
+	text: "Epic game!!!111!!", 
 	isUI: true,
 	color: "#ee9b00",
 	font: "bold 60px system-ui"
@@ -48,12 +48,21 @@ const mapEditorButton = new Button(100, 260, 50, "Map Editor", renderer, () => {
 const cancelStartButton = new Button(100, 260, 50, "Cancel", renderer, () => {
 	ws.close()
 })
+const endRoundMessage = {
+	type: "text",
+	text: "",
+	x: 0,
+	y: 0,
+	font: "bold 80px system-ui",
+	disabled: true,
+	z: 75
+}
 cancelStartButton.disabled = true
 cancelStartButton.label.disabled = true
 const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 	if (nameBox.value == "") {return}
 	
-	ws = new WebSocket("ws://localhost:3000")
+	ws = new WebSocket(`ws://${location.hostname}:3000`)
 	ws.addEventListener("message", (e) => {
 		let raw = JSON.parse(e.data)
 		let type = raw.type
@@ -67,10 +76,10 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 		}
 		else if (type == "shot") {
 			let tracer = {
-				x1: mes.x2,
-				y1: mes.y2,
-				x2: mes.x1,
-				y2: mes.y1,
+				x1: mes.hit.x2,
+				y1: mes.hit.y2,
+				x2: mes.hit.x1,
+				y2: mes.hit.y1,
 				width: 3,
 				type: "line",
 				ticks: 6,
@@ -80,27 +89,47 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 			
 			if (!preformanceMode) {
 				tracer.listColor = [233, 216, 166, 80]
-				
-				for (let i=0; i<7; i++) {
-					let rot = Math.random()*5
-					
-					players[mes.id].weapon.x += -Math.sin(players[mes.id].weapon.rotation)*2
-					players[mes.id].weapon.y -= Math.cos(players[mes.id].weapon.rotation)*2
-					
-					renderer.addToScene("Game", {
-						x2: mes.x2,
-						y2: mes.y2,
-						x1: (Math.sin(rot))*(Math.random()*10+20)+mes.x2,
-						y1: (Math.cos(rot))*(Math.random()*10+20)+mes.y2,
-						listColor: [233, 216, 166, 40],
-						initTrans: 30,
-						width: 2,
-						type: "line",
-						ticks: 8,
-						trace: true,
-						traceWidth: 8,
-						z: 2
-					})
+
+				if (mes.hitId) {
+					for (let i=0; i<4; i++) {
+						let rot = Math.random()*5
+						
+						players[mes.id].weapon.x += -Math.sin(players[mes.id].weapon.rotation)*2
+						players[mes.id].weapon.y -= Math.cos(players[mes.id].weapon.rotation)*2
+						
+						renderer.addToScene("Game", {
+							type: "circ",
+							x: (Math.sin(rot))*(Math.random()*10+10)+mes.hit.x2,
+							y: (Math.cos(rot))*(Math.random()*10+10)+mes.hit.y2,
+							rad: Math.random()*3+24,
+							listColor: [116, 2, 1, 50],
+							fade: true,
+							ticks: 40,
+							z: 5
+						})
+					}
+				} else {
+					for (let i=0; i<7; i++) {
+						let rot = Math.random()*5
+						
+						players[mes.id].weapon.x += -Math.sin(players[mes.id].weapon.rotation)*2
+						players[mes.id].weapon.y -= Math.cos(players[mes.id].weapon.rotation)*2
+						
+						renderer.addToScene("Game", {
+							x2: mes.hit.x2,
+							y2: mes.hit.y2,
+							x1: (Math.sin(rot))*(Math.random()*10+20)+mes.hit.x2,
+							y1: (Math.cos(rot))*(Math.random()*10+20)+mes.hit.y2,
+							listColor: [233, 216, 166, 40],
+							initTrans: 30,
+							width: 2,
+							type: "line",
+							ticks: 8,
+							trace: true,
+							traceWidth: 8,
+							z: 2
+						})
+					}
 				}
 			} else {
 				tracer.color = "rgba(223, 216, 166, 80%)"
@@ -137,10 +166,30 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 				let spawn = map.filter(a => a.mapType == `${players[id].team} spawn`)[mes.spawns[id]]
 				players[id].x = spawn.x
 				players[id].y = spawn.y
+				players[id].alive = true
+				players[id].disabled = false
+				players[id].nametag.disabled = false
+				players[id].weapon.disabled = false
 			}
 			
+			endRoundMessage.disabled = true
 			renderer.switchScene("Game")
 			renderer.activeScene.cam = {x: player.x, y: player.y}
+		}
+		else if (type == "died") {
+			if (players[mes.killed].alive) {
+				players[mes.killed].disabled = true
+				players[mes.killed].alive = false
+				players[mes.killed].nametag.disabled = true
+				players[mes.killed].weapon.disabled = true
+
+				if (players[mes.killed] == player || players[mes.killed] == player.spectating) {
+					player.spectating = players[mes.killer]
+				}
+			}
+		} else if (type == "begin end round") {
+			endRoundMessage.disabled = false
+			endRoundMessage.text = mes.winner == player.team ? "Round Won" : "Round Lost"
 		}
 		else if (type == "player left") {
 			renderer.switchScene("MainMenu")
@@ -210,6 +259,7 @@ player.nametag = {
 	font: "bold 20px system-ui",
 	z: 50
 }
+player.alive = false
 for (const unaPlayer of unasignedPlayers) {
 	unaPlayer.weapon = {
 		x: 0,
@@ -230,6 +280,7 @@ for (const unaPlayer of unasignedPlayers) {
 		font: "bold 20px system-ui",
 		z: 50
 	}
+	unaPlayer.alive = false
 	
 	renderer.addToScene("Game", unaPlayer.weapon)
 	renderer.addToScene("Game", unaPlayer.nametag)
@@ -245,6 +296,7 @@ renderer.addToScene("MainMenu", cancelStartButton)
 renderer.addToScene("MainMenu", nameBox)
 renderer.addToScene("Game", crosshair)
 renderer.addToScene("MainMenu", playerWait)
+renderer.addToScene("Game", endRoundMessage)
 
 renderer.addPostProcessing("Game", (imageData) => {
 	let halfHeight = imageData.height/2
@@ -474,63 +526,72 @@ function loop() {
 		crosshair.x = input.mouse.x
 		crosshair.y = -input.mouse.y
 		
-		player.handleMovement(input, renderer.dt)
-		for (const obj of map) {
-			if (obj.mapType == "block") {
-				player.handleCollision(obj)
+		if (player.alive) {
+			player.handleMovement(input, renderer.dt)
+			for (const obj of map) {
+				if (obj.mapType == "block") {
+					player.handleCollision(obj)
+				}
+			}
+			ws.send(JSON.stringify({type: "update move", mes: {x: player.x, y: player.y, rot: player.weapon.rotation}}))
+			
+			Util.pointToObject(player.weapon, Util.uiToGamePosition(crosshair, renderer))
+			Util.lerpObject(renderer.activeScene.cam, player, 0.05)
+			
+			if (input.keys[32] && renderer.tick - player.weapon.lastShotTick > 7) {	
+				player.weapon.lastShotTick = renderer.tick
+				let p = Util.uiToGamePosition(crosshair, renderer)
+				
+				let rotation = (Math.random()-0.5)/10
+				let unrotatedX = (p.x-player.weapon.x)
+				let unrotatedY = (p.y-player.weapon.y)
+				
+				let tracer = {
+					x1: player.weapon.x,
+					y1: player.weapon.y,
+					x2: (unrotatedX*Math.cos(rotation)-unrotatedY*Math.sin(rotation))*50+player.weapon.x,
+					y2: (unrotatedY*Math.cos(rotation)+unrotatedX*Math.sin(rotation))*50+player.weapon.y,
+				}
+				
+				let hit
+				let hitDis = Infinity
+				
+				for (const obj of map) {
+					if (obj.mapType != "block") {continue}
+
+					let res = Util.lineRectIntersect(tracer, obj)
+					
+					if (res.hit) {
+						let dis = Math.sqrt((tracer.x1 - res.x1)**2 + (tracer.y1 - res.y1)**2)
+						if (dis < hitDis) {
+							hit = res
+							hitDis = dis
+						}
+					}
+				}
+				
+				if (hit) {
+					tracer.x2 = hit.x1
+					tracer.y2 = hit.y1
+				}
+				
+				ws.send(JSON.stringify({type: "shot", mes: {x1: tracer.x1, y1: tracer.y1, x2: tracer.x2, y2: tracer.y2}}))
+			}
+		} else {
+			if (player.spectating) {
+				Util.lerpObject(renderer.activeScene.cam, player.spectating, 0.05)
 			}
 		}
-		ws.send(JSON.stringify({type: "update move", mes: {x: player.x, y: player.y, rot: player.weapon.rotation}}))
-		
+
+		endRoundMessage.x = renderer.activeScene.cam.x - renderer.measureText(endRoundMessage).width/2
+		endRoundMessage.y = -renderer.activeScene.cam.y - 40
+
 		for (const uid in players) {
 			if (!players[uid].nametag) {continue}
 			
 			Util.lerpObject(players[uid].weapon, players[uid], 0.4)
 			players[uid].nametag.x = players[uid].x - renderer.measureText(players[uid].nametag).width/2
 			players[uid].nametag.y = -players[uid].y - 45
-		}
-		
-		Util.pointToObject(player.weapon, Util.uiToGamePosition(crosshair, renderer))
-		Util.lerpObject(renderer.activeScene.cam, player, 0.05)
-		
-		if (input.keys[32] && renderer.tick - player.weapon.lastShotTick > 7) {	
-			player.weapon.lastShotTick = renderer.tick
-			let p = Util.uiToGamePosition(crosshair, renderer)
-			
-			let rotation = (Math.random()-0.5)/10
-			let unrotatedX = (p.x-player.weapon.x)
-			let unrotatedY = (p.y-player.weapon.y)
-			
-			let tracer = {
-				x1: player.weapon.x,
-				y1: player.weapon.y,
-				x2: (unrotatedX*Math.cos(rotation)-unrotatedY*Math.sin(rotation))*50+player.weapon.x,
-				y2: (unrotatedY*Math.cos(rotation)+unrotatedX*Math.sin(rotation))*50+player.weapon.y,
-			}
-			
-			let hit
-			let hitDis = Infinity
-			
-			for (const obj of map) {
-				if (obj.mapType != "block") {continue}
-
-				let res = Util.lineRectIntersect(tracer, obj)
-				
-				if (res.hit) {
-					let dis = Math.sqrt((tracer.x1 - res.x1)**2 + (tracer.y1 - res.y1)**2)
-					if (dis < hitDis) {
-						hit = res
-						hitDis = dis
-					}
-				}
-			}
-			
-			if (hit) {
-				tracer.x2 = hit.x1
-				tracer.y2 = hit.y1
-			}
-			
-			ws.send(JSON.stringify({type: "shot", mes: {x1: tracer.x1, y1: tracer.y1, x2: tracer.x2, y2: tracer.y2}}))
 		}
 		
 		document.body.style.cursor = "none"
