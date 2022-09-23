@@ -3,21 +3,8 @@ const uuid = require('uuid')
 const fs = require('fs');
 const readline = require('readline')
 const express = require('express')
-const os = require('os')
 
-// find the correct network interface to listen on
-let addresses = []
-let interfaces = os.networkInterfaces()
-for (let interface of Object.values(interfaces)) {
-	for (let connection of interface) {
-		// sort to only IPv4, and not 127.0.0.1
-		if (connection.family == "IPv4" && !connection.internal) {
-			addresses.push(connection.address)
-		}
-	}
-}
-
-const address = addresses[0]
+const address = "0.0.0.0"
 
 const app = express()
 app.use("/", express.static(__dirname + "/../"))
