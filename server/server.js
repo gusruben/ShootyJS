@@ -4,7 +4,7 @@ const fs = require('fs');
 const readline = require('readline')
 const express = require('express')
 
-const address = require('os').networkInterfaces()['Wi-Fi'].filter(a => a.family == "IPv4")[0].address
+const address = "0.0.0.0"
 
 const app = express()
 app.use("/", express.static(__dirname + "/../"))
