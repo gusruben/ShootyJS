@@ -5,11 +5,7 @@ const renderer = new Renderer(ctx, canvas)
 
 const input = new Input()
 
-const maxPlayers = 12
-
 const player = new Player()
-var unasignedPlayers = []
-for (let i=0; i<maxPlayers-1; i++) {unasignedPlayers.push(new Player())}
 var players = {}
 
 renderer.addScene("Game")
@@ -22,6 +18,49 @@ const preformanceMode = false
 var ws
 var map
 
+function addPlayer(mes) {
+	let np = new Player()
+
+	np.weapon = {
+		x: 0,
+		y: 0,
+		type: "rect",
+		sizeX: 10,
+		sizeY: 30,
+		rotation: 0,
+		color: "#bb3e03",
+		z: 3,
+		lastShotTick: -Infinity,
+		disabled: !mes.alive
+	}
+	np.nametag = {
+		x: 0,
+		y: 0,
+		type: "text",
+		text: mes.name,
+		font: "bold 20px system-ui",
+		z: 50,
+		disabled: !mes.alive
+	}
+	
+	np.disabled = !mes.alive
+	np.alive = mes.alive
+	np.team = mes.team
+	np.id = mes.id
+	np.name = mes.name
+	
+	if (np.team != player.team) {
+		np.weapon.color = "#94d2bd"
+		np.color = "#0a9396"
+	}
+
+	players[mes.id] = np
+
+	renderer.addToScene("Game", np)
+	renderer.addToScene("Game", np.nametag)
+	renderer.addToScene("Game", np.weapon)
+}
+ 
 const title = {
 	type: "text",
 	x: 100,
@@ -68,7 +107,7 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 		let type = raw.type
 		let mes = raw.mes
 		
-		if (type == "player update") {			
+		if (type == "player update") {
 			players[mes.id].x = mes.x
 			players[mes.id].y = mes.y
 			players[mes.id].weapon.rotation = mes.rot
@@ -138,7 +177,17 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 			renderer.addToScene("Game", tracer)
 		}
 		else if (type == "player joined") {
-			playerWait.text = `${mes}/${maxPlayers} Waiting for Players...`
+			addPlayer(mes)
+		}
+		else if (type == "player left") {
+			renderer.removeFromScene(players[mes.id])
+			renderer.removeFromScene(players[mes.id].weapon)
+			renderer.removeFromScene(players[mes.id].nametag)
+			delete players[mes.id]
+
+			if (Object.values(players).length < 2) {
+				renderer.switchScene("MainMenu")
+			}
 		}
 		else if (type == "start") {
 			map = JSON.parse(Util.LZWdecompress(mes.map.split(",")))
@@ -146,20 +195,6 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 				if (obj.mapType == "block") {
 					renderer.addToScene("Game", obj)
 				}
-			}
-
-			for (let i=0; i<maxPlayers-1; i++) {
-				players[mes.players[i].id] = unasignedPlayers[i]
-				unasignedPlayers[i].id = mes.players[i].id
-				unasignedPlayers[i].team = mes.players[i].team
-				unasignedPlayers[i].nametag.text = mes.players[i].name
-				
-				if (unasignedPlayers[i].team != player.team) {
-					unasignedPlayers[i].weapon.color = "#94d2bd"
-					unasignedPlayers[i].color = "#0a9396"
-				}
-				
-				renderer.addToScene("Game", players[mes.players[i].id])
 			}
 
 			for (const id in players) {
@@ -191,18 +226,32 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 			endRoundMessage.disabled = false
 			endRoundMessage.text = mes.winner == player.team ? "Round Won" : "Round Lost"
 		}
-		else if (type == "player left") {
-			renderer.switchScene("MainMenu")
-			playerWait.text = `${mes}/${maxPlayers} Waiting for Players...`
-		}
 		else if (type == "uuid") {
 			players[mes.id] = player
 			player.id = mes.id
 			player.team = mes.team
+			player.name = mes.name
+
+			for (const ply of mes.players) {
+				addPlayer(ply)
+			}
+
+			if (mes.players < 2) {
+				playerWait.text = "Waiting for another player..."
+			} else {
+				map = JSON.parse(Util.LZWdecompress(mes.map.split(",")))
+				for (const obj of map) {
+					if (obj.mapType == "block") {
+						renderer.addToScene("Game", obj)
+					}
+				}
+
+				renderer.switchScene("Game")
+				let plrs = Object.values(players).filter(a => a.alive)
+				player.spectating = plrs[Math.floor(Math.random()*plrs.length)]
+			}
 		} else if (type == "waiting for map") {
-			playerWait.text = `${maxPlayers}/${maxPlayers} Waiting for Server to Load Map...`
-		} else if (type == "name") {
-			players[mes.id].name = mes.name
+			playerWait.text = `Waiting for Server to Load Map...`
 		}
 	})
 	ws.addEventListener("open", () => {
@@ -217,7 +266,6 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 		
 		player.nametag.text = nameBox.value
 		ws.send(JSON.stringify({type: "join", mes: {name: nameBox.value}}))
-		
 	})
 	ws.addEventListener("close", () => {
 		renderer.switchScene("MainMenu")
@@ -249,7 +297,8 @@ player.weapon = {
 	rotation: 0,
 	color: "#bb3e03",
 	z: 3,
-	lastShotTick: -Infinity
+	lastShotTick: -Infinity,
+	disabled: true
 }
 player.nametag = {
 	x: 0,
@@ -257,34 +306,11 @@ player.nametag = {
 	type: "text",
 	text: "",
 	font: "bold 20px system-ui",
-	z: 50
+	z: 50,
+	disabled: true
 }
 player.alive = false
-for (const unaPlayer of unasignedPlayers) {
-	unaPlayer.weapon = {
-		x: 0,
-		y: 0,
-		type: "rect",
-		sizeX: 10,
-		sizeY: 30,
-		rotation: 0,
-		color: "#bb3e03",
-		z: 3,
-		lastShotTick: -Infinity
-	}
-	unaPlayer.nametag = {
-		x: 0,
-		y: 0,
-		type: "text",
-		text: "",
-		font: "bold 20px system-ui",
-		z: 50
-	}
-	unaPlayer.alive = false
-	
-	renderer.addToScene("Game", unaPlayer.weapon)
-	renderer.addToScene("Game", unaPlayer.nametag)
-}
+player.disabled = true
 
 renderer.addToScene("Game", player.nametag)
 renderer.addToScene("Game", player.weapon)
@@ -525,7 +551,7 @@ function loop() {
 	if (renderer.scene == "Game") {
 		crosshair.x = input.mouse.x
 		crosshair.y = -input.mouse.y
-		
+
 		if (player.alive) {
 			player.handleMovement(input, renderer.dt)
 			for (const obj of map) {
@@ -533,6 +559,7 @@ function loop() {
 					player.handleCollision(obj)
 				}
 			}
+
 			ws.send(JSON.stringify({type: "update move", mes: {x: player.x, y: player.y, rot: player.weapon.rotation}}))
 			
 			Util.pointToObject(player.weapon, Util.uiToGamePosition(crosshair, renderer))
@@ -588,7 +615,7 @@ function loop() {
 
 		for (const uid in players) {
 			if (!players[uid].nametag) {continue}
-			
+
 			Util.lerpObject(players[uid].weapon, players[uid], 0.4)
 			players[uid].nametag.x = players[uid].x - renderer.measureText(players[uid].nametag).width/2
 			players[uid].nametag.y = -players[uid].y - 45
