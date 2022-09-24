@@ -4,7 +4,7 @@ const fs = require('fs');
 const readline = require('readline')
 const express = require('express')
 
-const address = "localhost"
+const address = "0.0.0.0"
 
 const app = express()
 app.use("/", express.static(__dirname + "/../"))
