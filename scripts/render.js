@@ -80,6 +80,7 @@ class Renderer {
 			this.ctx.strokeStyle = obj.color ? obj.color : "white"
 			if (obj.stroke) {
 				this.ctx.strokeStyle = obj.stroke
+				this.ctx.lineWidth = obj.strokeWidth ? obj.strokeWidth : 5
 			}
 			
 			if (!obj.isUI) {

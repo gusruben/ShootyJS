@@ -96,6 +96,8 @@ const endRoundMessage = {
 	disabled: true,
 	z: 75
 }
+var killFeed = []
+
 cancelStartButton.disabled = true
 cancelStartButton.label.disabled = true
 const startButton = new Button(100, 200, 50, "Start", renderer, () => {
@@ -209,7 +211,9 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 			}
 			
 			endRoundMessage.disabled = true
-			renderer.switchScene("Game")
+			if (renderer.scene !== "Game") {
+				renderer.switchScene("Game")
+			}
 			renderer.activeScene.cam = {x: player.x, y: player.y}
 		}
 		else if (type == "died") {
@@ -222,6 +226,42 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 				if (players[mes.killed] == player || players[mes.killed] == player.spectating) {
 					player.spectating = players[mes.killer]
 				}
+
+				for (const kill of killFeed) {
+					kill.y += 28
+					kill.label.y += 28
+				}
+
+				let bounder = {
+					type: "rect",
+					x: 20,
+					y: 20,
+					isUI: true,
+					sizeX: 0,
+					sizeY: 24,
+					color: "#ffffff77",
+					borderRadius: 4,
+					z: 60,
+					stroke: player == players[mes.killer] ? "green" : (player == players[mes.killed] ? "red" : undefined),
+					strokeWidth: 3,
+					ticks: 400,
+					label: {
+						type: "text",
+						text: `${players[mes.killer].name} 💀 ${players[mes.killed].name}`,
+						x: 25,
+						y: 22,
+						isUI: true,
+						font: "bold 20px system-ui",
+						z: 61,
+						ticks: 400
+					}
+				}
+				bounder.sizeX = renderer.measureText(bounder.label).width + 10
+
+				renderer.addToScene("Game", bounder)
+				renderer.addToScene("Game", bounder.label)
+
+				killFeed.push(bounder)
 			}
 		} else if (type == "begin end round") {
 			endRoundMessage.disabled = false
