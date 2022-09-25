@@ -186,6 +186,7 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 			delete players[mes.id]
 
 			if (Object.values(players).length < 2) {
+				playerWait.text = "Waiting for player to join..."
 				renderer.switchScene("MainMenu")
 			}
 		}
@@ -237,7 +238,7 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 			}
 
 			if (mes.players < 2) {
-				playerWait.text = "Waiting for another player..."
+				playerWait.text = "Waiting for player to join..."
 			} else {
 				map = JSON.parse(Util.LZWdecompress(mes.map.split(",")))
 				for (const obj of map) {

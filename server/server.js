@@ -4,7 +4,7 @@ const fs = require('fs');
 const readline = require('readline')
 const express = require('express')
 
-const address = "0.0.0.0"
+const address = "localhost"
 
 const app = express()
 app.use("/", express.static(__dirname + "/../"))
@@ -264,11 +264,12 @@ wss.on('connection', (ws) => {
 		ws.team == "red" ? reds-- : blues--
 		
 		console.log(`(${ws.name}) Left the game`)
+
+		for (const player of players) {
+			player.send(JSON.stringify({type: "player left", mes: {id: ws.id}}))
+		}
 		
 		if (players.length < 2) {
-			for (const player of players) {
-				player.send(JSON.stringify({type: "player left", mes: {id: ws.id}}))
-			}
 			if (serverState == "playing") {
 				console.log("Ending game due to loss of required players")
 			}
