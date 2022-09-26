@@ -48,6 +48,8 @@ function addPlayer(mes) {
 	np.team = mes.team
 	np.id = mes.id
 	np.name = mes.name
+	np.lmx = 0
+	np.lmy = 0
 	
 	if (np.team != player.team) {
 		np.weapon.color = "#94d2bd"
@@ -110,8 +112,8 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 		let mes = raw.mes
 		
 		if (type == "player update") {
-			players[mes.id].x = mes.x
-			players[mes.id].y = mes.y
+			players[mes.id].lmx = mes.x
+			players[mes.id].lmy = mes.y
 			players[mes.id].weapon.rotation = mes.rot
 			players[mes.id].team = mes.team
 		}
@@ -204,6 +206,8 @@ const startButton = new Button(100, 200, 50, "Start", renderer, () => {
 				let spawn = map.filter(a => a.mapType == `${players[id].team} spawn`)[mes.spawns[id]]
 				players[id].x = spawn.x
 				players[id].y = spawn.y
+				players[id].lmx = spawn.x
+				players[id].lmy = spawn.y
 				players[id].alive = true
 				players[id].disabled = false
 				players[id].nametag.disabled = false
@@ -655,9 +659,12 @@ function loop() {
 		endRoundMessage.y = -renderer.activeScene.cam.y - 40
 
 		for (const uid in players) {
-			if (!players[uid].nametag) {continue}
-
+			if (players[uid] != player) {
+				Util.lerpObject(players[uid], {x: players[uid].lmx, y: players[uid].lmy}, 0.1)
+			}
 			Util.lerpObject(players[uid].weapon, players[uid], 0.4)
+
+			if (!players[uid].nametag) {continue}
 			players[uid].nametag.x = players[uid].x - renderer.measureText(players[uid].nametag).width/2
 			players[uid].nametag.y = -players[uid].y - 45
 		}

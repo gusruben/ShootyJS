@@ -67,7 +67,6 @@ function lineRectIntersect(line, rect) {
 	let outcode0 = computeOutCode(x0, y0)
 	let outcode1 = computeOutCode(x1, y1)
 	let accept = false
-	let normal = {x: 0, y: 0}
 
 	while (true) {
 		if (!(outcode0 | outcode1)) {
@@ -288,7 +287,7 @@ function loop() {
 		}
 	}
 	
-	setTimeout(loop, 20)
+	setTimeout(loop, 200)
 }
 
-setTimeout(loop, 20)
+setTimeout(loop, 200)
