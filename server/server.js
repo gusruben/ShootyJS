@@ -2,7 +2,8 @@ const ws = require('ws')
 const uuid = require('uuid')
 const fs = require('fs');
 const readline = require('readline')
-const express = require('express')
+const express = require('express');
+const { time } = require('console');
 
 const address = "localhost"
 
@@ -24,9 +25,10 @@ rl.on('line', (input) => {
 	
 	if (command == "map") {
 		fs.readFile(`${__dirname}/maps/${parsed[1]}.tmf`, 'utf8', (err, data) => {
-			map = data
+			mapString = data
+			map = JSON.parse(LZWdecompress(data.split(","))).filter(a => a.mapType == "block")
 			
-			if (players.length > 1 && map) {
+			if (players.length > 1 && mapString) {
 				startGame()
 			}
 		})
@@ -107,13 +109,59 @@ function lineRectIntersect(line, rect) {
 	return {hit: accept, x1: x0, y1: y0, x2: x1, y2: y1}
 }
 
+function LZWdecompress(compressed)
+{
+	let dictionary = {};
+	for (let i = 0; i < 256; i++)
+	{
+		dictionary[i] = String.fromCharCode(i);
+	}
+	
+	let word = String.fromCharCode(compressed[0]);
+	let result = word;
+	let entry = '';
+	let dictSize = 256;
+	
+	for (let i = 1, len = compressed.length; i < len; i++)
+	{
+		let curNumber = compressed[i];
+		
+		if (dictionary[curNumber] !== undefined)
+		{
+			entry = dictionary[curNumber];
+		}
+		else
+		{
+			if (curNumber === dictSize)
+			{
+				entry = word + word[0];
+			}
+			else
+			{
+				throw 'Error in processing';
+				return null;
+			}
+		}
+		
+		result += entry;
+		
+		dictionary[dictSize++] = word + entry[0];
+		
+		word = entry;
+	}
+	
+	return result;
+}
+
 var serverState = "waiting for players"
 var players = []
 var playersById = {}
 
+var mapString
 var map
 fs.readFile(`${__dirname}/maps/dust2.tmf`, 'utf8', (err, data) => {
-	map = data
+	mapString = data
+	map = JSON.parse(LZWdecompress(data.split(","))).filter(a => a.mapType == "block")
 })
 
 var blues = 0
@@ -134,12 +182,14 @@ function startGame() {
 		player.rot = 0
 		player.health = 100
 		player.alive = true
+		player.shooting = false
+		player.lastShotTick = 0
 		
 		player.send(JSON.stringify({
 			type: "start", 
 			mes: {
 				players: players.filter(a => a!=player).map( a => ({id: a.id, team: a.team, name: a.name}) ),
-				map: map,
+				map: mapString,
 				spawns: spawns
 			}
 		}))
@@ -148,21 +198,93 @@ function startGame() {
 	serverState = "playing"
 }
 
+function doShot(player) {
+	let hitPlayer
+	let hit
+	let hitDis = Infinity
+
+	let rot = player.rot + (Math.random()-0.5)/8
+	let ray = {x1: player.x, y1: player.y, x2: Math.sin(rot)*1000+player.x, y2: Math.cos(rot)*1000+player.y}
+	
+	for (const obj of map) {
+		let res = lineRectIntersect(ray, obj)
+		
+		if (res.hit) {
+			let dis = Math.sqrt((ray.x1 - res.x1)**2 + (ray.y1 - res.y1)**2)
+			if (dis < hitDis) {
+				hit = res
+				hitDis = dis
+			}
+		}
+	}
+	for (const enemy of players.filter(a => a.team != player.team && a.alive)) {
+		let res = lineRectIntersect(ray, enemy)
+		
+		if (res.hit) {
+			let dis = Math.sqrt((ray.x1 - res.x1)**2 + (ray.y1 - res.y1)**2)
+			if (dis < hitDis) {
+				hit = res
+				hitDis = dis
+				hitPlayer = enemy
+			}
+		}
+	}
+	
+	if (hit) {
+		ray.x2 = hit.x1
+		ray.y2 = hit.y1
+	} if (hitPlayer) {
+		hitPlayer.health -= 22
+		if (hitPlayer.health <= 0) {
+			hitPlayer.alive = false
+			for (const conn of players) {
+				conn.send(JSON.stringify({type: "died", mes: {killed: hitPlayer.id, killer: player.id}}))
+			}
+
+			if (players.filter(a => a.team == "red" && a.alive).length <= 0) {
+				for (const conn of players) {
+					conn.send(JSON.stringify({type: "begin end round", mes: {winner: "blue"}}))
+				}
+
+				setTimeout(startGame, 2000)
+			}
+			if (players.filter(a => a.team == "blue" && a.alive).length <= 0) {
+				for (const conn of players) {
+					conn.send(JSON.stringify({type: "begin end round", mes: {winner: "red"}}))
+				}
+
+				setTimeout(startGame, 5000)
+			}
+
+		} else {
+			hitPlayer.send(JSON.stringify({type: "hit", mes: {health: hitPlayer.health}}))
+		}
+	}
+
+	for (const conn of players) {
+		conn.send(JSON.stringify({type: "shot", mes: {hit: ray, id: player.id, hitId: hitPlayer ? hitPlayer.id : undefined}}))
+	}
+}
+
 wss.on('connection', (ws) => {
 	ws.on('message', (raw) => {
 		parsed = JSON.parse(raw)
 		let type = parsed.type
 		let mes = parsed.mes
 		
-		parsed.mes.id = ws.id
-		
 		if (type == "update move") {
 			ws.x = mes.x
 			ws.y = mes.y
 			ws.rot = mes.rot
 		}
+		else if (type == "start shot") {
+			ws.shooting = true
+		}
+		else if (type == "stop shot") {
+			ws.shooting = false
+		}
 		else if (type == "join") {
-			if (!map) {
+			if (!mapString) {
 				ws.close()
 				console.log("Player attempted to join but was kicked because no map was loaded")
 				return
@@ -182,7 +304,7 @@ wss.on('connection', (ws) => {
 			ws.name = mes.name
 			ws.alive = false
 			playersById[ws.id] = ws
-			ws.send(JSON.stringify({type: "uuid", mes: {id: ws.id, team: ws.team, map: map, name: ws.name, players: players.filter(a => a != ws).map(a => ({id: a.id, team: a.team, name: a.name, alive: a.alive}))}}))
+			ws.send(JSON.stringify({type: "uuid", mes: {id: ws.id, team: ws.team, map: mapString, name: ws.name, players: players.filter(a => a != ws).map(a => ({id: a.id, team: a.team, name: a.name, alive: a.alive}))}}))
 
 
 			console.log(`(${mes.name}) Connected`)
@@ -192,67 +314,14 @@ wss.on('connection', (ws) => {
 				player.send(JSON.stringify({type: "player joined", mes: {id: ws.id, team: ws.team, name: ws.name, alive: ws.alive}}))
 			}
 
-			if (players.length > 1 && map && serverState == "waiting for players") {
+			if (players.length > 1 && mapString && serverState == "waiting for players") {
 				startGame()
-			} else if (players.length > 1 && !map) {
+			} else if (players.length > 1 && !mapString) {
 				for (const player of players) {
 					player.send(JSON.stringify({type: "waiting for map"}))
 				}
 
 				console.log("All players connected, waiting to load map...")
-			}
-		}
-		else if (type == "shot") {
-			let hitPlayerID
-			let hit
-			let hitDis = Infinity
-			
-			for (const player of players.filter(a => a.team != playersById[mes.id].team && a.alive)) {
-				let res = lineRectIntersect(mes, player)
-				
-				if (res.hit) {
-					let dis = Math.sqrt((mes.x1 - res.x1)**2 + (mes.y1 - res.y1)**2)
-					if (dis < hitDis) {
-						hit = res
-						hitDis = dis
-						hitPlayerID = player.id
-					}
-				}
-			}
-			
-			if (hit) {
-				mes.x2 = hit.x1
-				mes.y2 = hit.y1
-
-				playersById[hitPlayerID].health -= 22
-				if (playersById[hitPlayerID].health <= 0) {
-					playersById[hitPlayerID].alive = false
-					for (const player of players) {
-						player.send(JSON.stringify({type: "died", mes: {killed: playersById[hitPlayerID].id, killer: ws.id}}))
-					}
-
-					if (players.filter(a => a.team == "red" && a.alive).length <= 0) {
-						for (const player of players) {
-							player.send(JSON.stringify({type: "begin end round", mes: {winner: "blue"}}))
-						}
-
-						setTimeout(startGame, 2000)
-					}
-					if (players.filter(a => a.team == "blue" && a.alive).length <= 0) {
-						for (const player of players) {
-							player.send(JSON.stringify({type: "begin end round", mes: {winner: "red"}}))
-						}
-
-						setTimeout(startGame, 5000)
-					}
-
-				} else {
-					playersById[hitPlayerID].send(JSON.stringify({type: "hit", mes: {health: playersById[hitPlayerID].health}}))
-				}
-			}
-
-			for (const player of players) {
-				player.send(JSON.stringify({type: "shot", mes: {hit: mes, id: mes.id, hitId: hitPlayerID}}))
 			}
 		}
 	})
@@ -276,7 +345,7 @@ wss.on('connection', (ws) => {
 		}
 	})
 })
-
+let tick = 0
 function loop() {
 	if (serverState == "playing") {
 		for (const player of players) {
@@ -284,10 +353,17 @@ function loop() {
 				if (player == playerB) {continue}
 				player.send(JSON.stringify({type: "player update", mes: {x: playerB.x, y: playerB.y, rot: playerB.rot, id: playerB.id, team: playerB.team}}))
 			}
+			if (player.shooting) {
+				if (player.alive && Math.abs(tick - player.lastShotTick) > 1) {
+					doShot(player)
+					player.lastShotTick = tick
+				}
+			}
 		}
 	}
 	
-	setTimeout(loop, 200)
+	tick++ 
+	setTimeout(loop, 80)
 }
 
-setTimeout(loop, 200)
+setTimeout(loop, 80)
