@@ -268,7 +268,13 @@ function doShot(player) {
 
 wss.on('connection', (ws) => {
 	ws.on('message', (raw) => {
-		parsed = JSON.parse(raw)
+		let parsed
+		try {
+			parsed = JSON.parse(raw)
+		} catch {
+			console.log(`Invalid Json from (${ws.name})`)
+			return
+		}
 		let type = parsed.type
 		let mes = parsed.mes
 		
@@ -284,6 +290,10 @@ wss.on('connection', (ws) => {
 			ws.shooting = false
 		}
 		else if (type == "join") {
+			if (players.includes(ws)) {
+				return
+			}
+
 			if (!mapString) {
 				ws.close()
 				console.log("Player attempted to join but was kicked because no map was loaded")

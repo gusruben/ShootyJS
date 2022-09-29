@@ -229,7 +229,7 @@ function loop() {
 	
 	renderer.render()
 	
-	setTimeout(loop, 0)
+	requestAnimationFrame(loop)
 }
 
 requestAnimationFrame(loop)
