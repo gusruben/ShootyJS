@@ -184,11 +184,11 @@ function loop() {
 			}
 		}
 
-		if (input.keys[32] && !shooting) {
+		if ((input.keys[32] || input.mouse.down) && !shooting) {
 			shooting = true
 			ws.send(JSON.stringify({type: "start shot"}))
 		} 
-		else if (!input.keys[32] && shooting) {
+		else if (!(input.keys[32] || input.mouse.down) && shooting) {
 			shooting = false
 			ws.send(JSON.stringify({type: "stop shot"}))
 		}
