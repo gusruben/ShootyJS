@@ -8,5 +8,10 @@ class Input {
         window.addEventListener("mouseup", (e) => {this.mouse.down = false});
         window.addEventListener("keydown", (e) => {this.keys[e.keyCode] = true})
         window.addEventListener("keyup", (e) => {this.keys[e.keyCode] = false})
+
+        window.addEventListener("blur", (e) => {
+            this.mouse.down = false
+            this.keys.fill(false)
+        })
     }
 }
