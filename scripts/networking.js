@@ -54,7 +54,7 @@ function handlePeer(raw) {
 	if (mes[0] == "0") {
 		players[mes[1]].lmx = parseFloat(mes[2])
 		players[mes[1]].lmy = parseFloat(mes[3])
-		players[mes[1]].weapon.rotation = parseFloat(mes[4])
+		players[mes[1]].lmr = parseFloat(mes[4])
 
 		return true
 	}

@@ -206,6 +206,25 @@ function startGame() {
 	serverState = "playing"
 }
 
+function checkDubsky() {
+	if (players.filter(a => a.team == "red" && a.alive).length <= 0) {
+		for (const conn of players) {
+			blueDubs++
+			conn.send(JSON.stringify({type: "begin end round", mes: {winner: "blue", dubs: {reds: redDubs, blue: blueDubs}}}))
+		}
+
+		setTimeout(startGame, 5000)
+	}
+	else if (players.filter(a => a.team == "blue" && a.alive).length <= 0) {
+		for (const conn of players) {
+			redDubs++
+			conn.send(JSON.stringify({type: "begin end round", mes: {winner: "red", dubs: {reds: redDubs, blue: blueDubs}}}))
+		}
+
+		setTimeout(startGame, 5000)
+	}
+}
+
 function doShot(player) {
 	let hitPlayer
 	let hit
@@ -249,23 +268,7 @@ function doShot(player) {
 				conn.send(JSON.stringify({type: "died", mes: {killed: hitPlayer.id, killer: player.id}}))
 			}
 
-			if (players.filter(a => a.team == "red" && a.alive).length <= 0) {
-				for (const conn of players) {
-					blueDubs++
-					conn.send(JSON.stringify({type: "begin end round", mes: {winner: "blue", dubs: {reds: redDubs, blue: blueDubs}}}))
-				}
-
-				setTimeout(startGame, 5000)
-			}
-			else if (players.filter(a => a.team == "blue" && a.alive).length <= 0) {
-				for (const conn of players) {
-					redDubs++
-					conn.send(JSON.stringify({type: "begin end round", mes: {winner: "red", dubs: {reds: redDubs, blue: blueDubs}}}))
-				}
-
-				setTimeout(startGame, 5000)
-			}
-
+			checkDubsky()
 		} else {
 			for (const conn of players) {
 				conn.send(JSON.stringify({type: "hit", mes: {id: hitPlayer.id, health: hitPlayer.health}}))
@@ -375,6 +378,20 @@ wss.on('connection', (ws) => {
 		for (const player of players) {
 			player.send(JSON.stringify({type: "player left", mes: {id: ws.id}}))
 		}
+
+		checkDubsky()
+
+		/*if (Math.abs(reds - blues) > 1) {
+			if (reds > blues) {
+				reds--
+				blues++
+				players.filter(a => a.team == "red")[0].team = "blue"
+			} else {
+				blues--
+				reds++
+				players.filter(a => a.team == "blue")[0].team = "red"
+			}
+		}*/
 		
 		if (players.length < 2) {
 			if (serverState == "playing") {

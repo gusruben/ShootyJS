@@ -13,7 +13,8 @@ renderer.addScene("MainMenu", input)
 renderer.addScene("MapEditor", input)
 renderer.switchScene("MainMenu")
 
-const preformanceMode = false
+var preformanceMode = false
+var interpolation = 0.15
 
 var map
 
@@ -231,7 +232,10 @@ function loop() {
 
 		for (const uid in players) {
 			if (players[uid] != player) {
-				Util.lerpObject(players[uid], {x: players[uid].lmx, y: players[uid].lmy}, 0.4)
+				Util.lerpObject(players[uid], {x: players[uid].lmx, y: players[uid].lmy}, interpolation)
+				if (players[uid].lmr != undefined) {
+					players[uid].weapon.rotation = Util.lerp(players[uid].weapon.rotation, players[uid].lmr, interpolation)
+				}
 			}
 			Util.lerpObject(players[uid].weapon, players[uid], 0.4)
 
