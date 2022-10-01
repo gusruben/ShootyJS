@@ -216,11 +216,11 @@ function loop() {
 			}
 		}
 
-		if (input.keys[32] && !shooting) {
+		if ((input.keys[32] || input.mouse.down) && !shooting) {
 			shooting = true
 			ws.send(0x01)
 		} 
-		else if (!input.keys[32] && shooting) {
+		else if (!(input.keys[32] || input.mouse.down) && shooting) {
 			shooting = false
 			ws.send(0x02)
 		}

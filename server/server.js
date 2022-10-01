@@ -6,12 +6,13 @@ const express = require('express');
 //const { PeerServer } = require('peer');
 
 const address = "0.0.0.0"
+const port = 3001
 
 const app = express()
 app.use("/", express.static(__dirname + "/../"))
 
-app.listen(3001, address, () => {
-	console.log(`Listening on ${address}:${3001}`)
+app.listen(port, address, () => {
+	console.log(`Listening on http://${address}:${port}`)
 })
 
 //const peerServer = PeerServer({ port: 3002 })
