@@ -15,52 +15,28 @@ renderer.switchScene("MainMenu")
 
 const preformanceMode = false
 
-var ws
 var map
 
-function addPlayer(mes) {
-	let np = new Player()
-
-	np.weapon = {
-		x: 0,
-		y: 0,
-		type: "rect",
-		sizeX: 10,
-		sizeY: 30,
-		rotation: 0,
-		color: "#bb3e03",
-		z: 3,
-		lastShotTick: -Infinity,
-		disabled: !mes.alive
-	}
-	np.nametag = {
-		x: 0,
-		y: 0,
-		type: "text",
-		text: mes.name,
-		font: "bold 20px system-ui",
-		z: 50,
-		disabled: !mes.alive
-	}
-	
-	np.disabled = !mes.alive
-	np.alive = mes.alive
-	np.team = mes.team
-	np.id = mes.id
-	np.name = mes.name
-	np.lmx = 0
-	np.lmy = 0
-	
-	if (np.team != player.team) {
-		np.weapon.color = "#94d2bd"
-		np.color = "#0a9396"
+function updateHealthBar() {
+	let health
+	if (player.spectating) {
+		health = player.spectating.health
+	} else {
+		health = player.health
 	}
 
-	players[mes.id] = np
+	let mul = health/100
 
-	renderer.addToScene("Game", np)
-	renderer.addToScene("Game", np.nametag)
-	renderer.addToScene("Game", np.weapon)
+	healthBarText.text = Math.ceil(health)
+	healthBar.sizeX = 400*mul
+	healthBar.color = `rgba(${255-(mul*255)+20}, ${mul*255+20}, 20, 0.8)`
+}
+function updateAmmoCount() {
+	if (player.spectating) {
+		ammoText.text = `${player.spectating.ammo} | ${player.spectating.reserve}`
+	} else {
+		ammoText.text = `${player.ammo} | ${player.reserve}`
+	}
 }
  
 const title = {
@@ -70,7 +46,7 @@ const title = {
 	text: "Epic game!!!111!!", 
 	isUI: true,
 	color: "#ee9b00",
-	font: "bold 60px system-ui"
+	fontSize: 60,
 }
 const playerWait = {
 	type: "text",
@@ -79,9 +55,54 @@ const playerWait = {
 	text: "", 
 	isUI: true,
 	color: "#ee9b00",
-	font: "bold 40px system-ui",
+	fontSize: 40,
 	disabled: true
 }
+const healthBarText = {
+	type: "text",
+	x: 105,
+	y: -99,
+	isUI: true,
+	align: "bottom left",
+	text: 100,
+	fontSize: 40,
+	z: 81
+}
+const healthBarBack = {
+	type: "rect",
+	x: 95,
+	y: -105,
+	sizeX: 410,
+	sizeY: 50,
+	isUI: true,
+	align: "bottom left",
+	color: "rgba(255,255,255,0.5)",
+	z: 79
+}
+const healthBar = {
+	type: "rect",
+	x: 100,
+	y: -100,
+	sizeX: 400,
+	sizeY: 40,
+	isUI: true,
+	align: "bottom left",
+	color: "rgba(20,255,20,0.8)",
+	z: 80
+}
+
+const ammoText = {
+	type: "text",
+	x: -100,
+	y: -79,
+	isUI: true,
+	fontSize: 40,
+	alignSelf: "center",
+	align: "bottom right",
+	text: "20 | 20",
+	z: 80,
+}
+
 const nameBox = new TextBox(100, 320, 50, 300, "Name...", renderer)
 const mapEditorButton = new Button(100, 260, 50, "Map Editor", renderer, () => {
 	renderer.switchScene("MapEditor")
@@ -94,8 +115,11 @@ const endRoundMessage = {
 	text: "",
 	x: 0,
 	y: 0,
-	font: "bold 80px system-ui",
+	isUI: true,
+	fontSize: 80,
 	disabled: true,
+	align: "center",
+	alignSelf: "center",
 	z: 75
 }
 var killFeed = []
@@ -127,7 +151,7 @@ player.nametag = {
 	y: 0,
 	type: "text",
 	text: "",
-	font: "bold 20px system-ui",
+	fontSize: 20,
 	z: 50,
 	disabled: true
 }
@@ -144,9 +168,15 @@ renderer.addToScene("MainMenu", nameBox)
 renderer.addToScene("Game", crosshair)
 renderer.addToScene("MainMenu", playerWait)
 renderer.addToScene("Game", endRoundMessage)
+renderer.addToScene("Game", healthBar)
+renderer.addToScene("Game", healthBarBack)
+renderer.addToScene("Game", healthBarText)
+renderer.addToScene("Game", ammoText)
 
 shooting = false
+reloading = false
 
+/*
 renderer.addPostProcessing("Game", (imageData) => {
 	let halfHeight = imageData.height/2
 	let halfWidth = imageData.width/2
@@ -157,9 +187,10 @@ renderer.addPostProcessing("Game", (imageData) => {
 		let apx = api%imageData.width - halfWidth
 		let apy = api*invIMwidth - halfHeight
 		
-		//imageData.data[i+0] += (Math.abs(apx)+Math.abs(apy)) * 128
+		imageData.data[i+0] += (Math.abs(apx)+Math.abs(apy)) * 128
 	}	
 })
+*/
 
 function loop() {
 	if (renderer.scene == "Game") {
@@ -177,7 +208,7 @@ function loop() {
 			Util.pointToObject(player.weapon, Util.uiToGamePosition(crosshair, renderer))
 			Util.lerpObject(renderer.activeScene.cam, player, 0.05)
 
-			ws.send(JSON.stringify({type: "update move", mes: {x: player.x, y: player.y, rot: player.weapon.rotation}}))
+			ws.send(`${0x00} ${player.x} ${player.y} ${player.weapon.rotation}`)
 		} else {
 			if (player.spectating) {
 				Util.lerpObject(renderer.activeScene.cam, player.spectating, 0.05)
@@ -186,15 +217,17 @@ function loop() {
 
 		if (input.keys[32] && !shooting) {
 			shooting = true
-			ws.send(JSON.stringify({type: "start shot"}))
+			ws.send(0x01)
 		} 
 		else if (!input.keys[32] && shooting) {
 			shooting = false
-			ws.send(JSON.stringify({type: "stop shot"}))
+			ws.send(0x02)
 		}
 
-		endRoundMessage.x = renderer.activeScene.cam.x - renderer.measureText(endRoundMessage).width/2
-		endRoundMessage.y = -renderer.activeScene.cam.y - 40
+		if (input.keys[82] && !reloading && player.ammo < 20) {
+			reloading = true
+			ws.send(0x03)
+		}
 
 		for (const uid in players) {
 			if (players[uid] != player) {

@@ -82,7 +82,7 @@ class Button {
 		this.label = {
 			type: "text",
 			text: labelText,
-			font: `bold ${height-6}px system-ui`,
+			fontSize: height-6,
 			
 			x: x+6,
 			y: y+3,
@@ -148,7 +148,7 @@ class TextBox {
 		this.label = {
 			type: "text",
 			text: placeholderText,
-			font: `bold ${height-6}px system-ui`,
+			fontSize: height-6,
 			
 			x: x+6,
 			y: y+3,
