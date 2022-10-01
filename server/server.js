@@ -3,7 +3,7 @@ const uuid = require('uuid')
 const fs = require('fs');
 const readline = require('readline')
 const express = require('express');
-const { time } = require('console');
+//const { PeerServer } = require('peer');
 
 const address = "0.0.0.0"
 const port = 3001
@@ -14,6 +14,8 @@ app.use("/", express.static(__dirname + "/../"))
 app.listen(port, address, () => {
 	console.log(`Listening on http://${address}:${port}`)
 })
+
+//const peerServer = PeerServer({ port: 3002 })
 
 const wss = new ws.WebSocketServer({ host: address, port: 3000 })
 const rl = readline.createInterface({
@@ -167,6 +169,8 @@ fs.readFile(`${__dirname}/maps/dust2.tmf`, 'utf8', (err, data) => {
 
 var blues = 0
 var reds = 0
+var blueDubs = 0
+var redDubs = 0
 
 function startGame() {
 	console.log("Starting game!")
@@ -185,6 +189,10 @@ function startGame() {
 		player.alive = true
 		player.shooting = false
 		player.lastShotTick = 0
+		player.ammo = 20
+		player.reserve = 20
+		player.reloading = false
+		player.lastReloadTick = 0
 		
 		player.send(JSON.stringify({
 			type: "start", 
@@ -199,12 +207,31 @@ function startGame() {
 	serverState = "playing"
 }
 
+function checkDubsky() {
+	if (players.filter(a => a.team == "red" && a.alive).length <= 0) {
+		for (const conn of players) {
+			blueDubs++
+			conn.send(JSON.stringify({type: "begin end round", mes: {winner: "blue", dubs: {reds: redDubs, blue: blueDubs}}}))
+		}
+
+		setTimeout(startGame, 5000)
+	}
+	else if (players.filter(a => a.team == "blue" && a.alive).length <= 0) {
+		for (const conn of players) {
+			redDubs++
+			conn.send(JSON.stringify({type: "begin end round", mes: {winner: "red", dubs: {reds: redDubs, blue: blueDubs}}}))
+		}
+
+		setTimeout(startGame, 5000)
+	}
+}
+
 function doShot(player) {
 	let hitPlayer
 	let hit
 	let hitDis = Infinity
 
-	let rot = player.rot + (Math.random()-0.5)/8
+	let rot = player.rot + (Math.random()-0.5)/5
 	let ray = {x1: player.x, y1: player.y, x2: Math.sin(rot)*1000+player.x, y2: Math.cos(rot)*1000+player.y}
 	
 	for (const obj of map) {
@@ -235,40 +262,55 @@ function doShot(player) {
 		ray.x2 = hit.x1
 		ray.y2 = hit.y1
 	} if (hitPlayer) {
-		hitPlayer.health -= 22
+		hitPlayer.health -= 24.75
 		if (hitPlayer.health <= 0) {
 			hitPlayer.alive = false
 			for (const conn of players) {
 				conn.send(JSON.stringify({type: "died", mes: {killed: hitPlayer.id, killer: player.id}}))
 			}
 
-			if (players.filter(a => a.team == "red" && a.alive).length <= 0) {
-				for (const conn of players) {
-					conn.send(JSON.stringify({type: "begin end round", mes: {winner: "blue"}}))
-				}
-
-				setTimeout(startGame, 2000)
-			}
-			if (players.filter(a => a.team == "blue" && a.alive).length <= 0) {
-				for (const conn of players) {
-					conn.send(JSON.stringify({type: "begin end round", mes: {winner: "red"}}))
-				}
-
-				setTimeout(startGame, 5000)
-			}
-
+			checkDubsky()
 		} else {
-			hitPlayer.send(JSON.stringify({type: "hit", mes: {health: hitPlayer.health}}))
+			for (const conn of players) {
+				conn.send(JSON.stringify({type: "hit", mes: {id: hitPlayer.id, health: hitPlayer.health}}))
+			}
 		}
 	}
 
 	for (const conn of players) {
-		conn.send(JSON.stringify({type: "shot", mes: {hit: ray, id: player.id, hitId: hitPlayer ? hitPlayer.id : undefined}}))
+		conn.send(`1 ${ray.x1} ${ray.y1} ${ray.x2} ${ray.y2} ${hitPlayer == undefined ? 0 : 1} ${player.id}`)
 	}
+}
+
+function handleRaw(ws, raw) {
+	if (raw[0] == 48) {
+		let mes = raw.toString().split(" ")
+		ws.x = parseFloat(mes[1])
+		ws.y = parseFloat(mes[2])
+		ws.rot = parseFloat(mes[3])
+		return true
+	}
+	if (raw == 0x01) {
+		ws.shooting = true
+		return true
+	}
+	if (raw == 0x02) {
+		ws.shooting = false
+		return true
+	}
+	if (raw == 0x03 && ws.ammo < 20 && !ws.reloading && ws.reserve > 0) {
+		ws.reloading = true
+		ws.lastReloadTick = tick
+		return true
+	}
+
+	return false
 }
 
 wss.on('connection', (ws) => {
 	ws.on('message', (raw) => {
+		if (handleRaw(ws, raw)) {return}
+
 		let parsed
 		try {
 			parsed = JSON.parse(raw)
@@ -279,18 +321,7 @@ wss.on('connection', (ws) => {
 		let type = parsed.type
 		let mes = parsed.mes
 		
-		if (type == "update move") {
-			ws.x = mes.x
-			ws.y = mes.y
-			ws.rot = mes.rot
-		}
-		else if (type == "start shot") {
-			ws.shooting = true
-		}
-		else if (type == "stop shot") {
-			ws.shooting = false
-		}
-		else if (type == "join") {
+		if (type == "join") {
 			if (players.includes(ws)) {
 				return
 			}
@@ -315,8 +346,9 @@ wss.on('connection', (ws) => {
 			ws.name = mes.name
 			ws.alive = false
 			playersById[ws.id] = ws
-			ws.send(JSON.stringify({type: "uuid", mes: {id: ws.id, team: ws.team, map: mapString, name: ws.name, players: players.filter(a => a != ws).map(a => ({id: a.id, team: a.team, name: a.name, alive: a.alive}))}}))
+			//ws.peerId = mes.peerId
 
+			ws.send(JSON.stringify({type: "uuid", mes: {id: ws.id, team: ws.team, map: mapString, name: ws.name, players: players.filter(a => a != ws).map(a => ({id: a.id, team: a.team, name: a.name, alive: a.alive, health: a.health, ammo: a.ammo, reserve: a.reserve}))}}))
 
 			console.log(`(${mes.name}) Connected`)
 		
@@ -347,6 +379,20 @@ wss.on('connection', (ws) => {
 		for (const player of players) {
 			player.send(JSON.stringify({type: "player left", mes: {id: ws.id}}))
 		}
+
+		checkDubsky()
+
+		/*if (Math.abs(reds - blues) > 1) {
+			if (reds > blues) {
+				reds--
+				blues++
+				players.filter(a => a.team == "red")[0].team = "blue"
+			} else {
+				blues--
+				reds++
+				players.filter(a => a.team == "blue")[0].team = "red"
+			}
+		}*/
 		
 		if (players.length < 2) {
 			if (serverState == "playing") {
@@ -356,25 +402,43 @@ wss.on('connection', (ws) => {
 		}
 	})
 })
+
+
 let tick = 0
 function loop() {
 	if (serverState == "playing") {
 		for (const player of players) {
 			for (const playerB of players.filter(a => a.alive)) {
 				if (player == playerB) {continue}
-				player.send(JSON.stringify({type: "player update", mes: {x: playerB.x, y: playerB.y, rot: playerB.rot, id: playerB.id, team: playerB.team}}))
+				player.send(`0 ${playerB.id} ${playerB.x} ${playerB.y} ${playerB.rot}`)
 			}
 			if (player.shooting) {
-				if (player.alive && Math.abs(tick - player.lastShotTick) > 1) {
+				if (player.alive && Math.abs(tick - player.lastShotTick) > 1 && player.ammo > 0 && !player.reloading) {
 					doShot(player)
+					player.ammo--
 					player.lastShotTick = tick
+				}
+			}
+			if (player.reloading && Math.abs(tick - player.lastReloadTick) > 8 && player.reserve > 0) {
+				player.reloading = false
+				
+				if (player.reserve >= (20 - player.ammo)) {
+					player.reserve -= (20 - player.ammo)
+					player.ammo = 20
+				} else {
+					player.ammo += player.reserve
+					player.reserve = 0
+				}
+
+				for (const conn of players) {
+					conn.send(`2 ${player.id} ${player.ammo} ${player.reserve}`)
 				}
 			}
 		}
 	}
 	
 	tick++ 
-	setTimeout(loop, 80)
+	setTimeout(loop, 100)
 }
 
-setTimeout(loop, 80)
+setTimeout(loop, 100)

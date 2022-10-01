@@ -86,12 +86,28 @@ class Renderer {
 			if (!obj.isUI) {
 				this.ctx.translate(this.canvas.width/2, this.canvas.height/2)
 				this.ctx.translate(-this.activeScene.cam.x, this.activeScene.cam.y)
+			} else if (obj.align) {
+				if (obj.align == "top right") {
+					this.ctx.translate(this.canvas.width, 0)
+				}
+				if (obj.align == "bottom left") {
+					this.ctx.translate(0, this.canvas.height)
+				}
+				if (obj.align == "bottom right") {
+					this.ctx.translate(this.canvas.width, this.canvas.height)
+				}
+				if (obj.align == "center") {
+					this.ctx.translate(this.canvas.width/2, this.canvas.height/2)
+				}
 			}
 			
 			if (obj.type == "rect") {
 				if (obj.borderRadius) {
 					if (obj.isUI) {
 						this.ctx.translate(obj.x, obj.y)
+						if (obj.alignSelf == "center") {
+							this.ctx.translate(-obj.sizeX/2, -obj.sizeY/2)
+						}
 					} else {
 						this.ctx.translate(obj.x, -obj.y)
 						this.ctx.rotate(obj.rotation)
@@ -130,7 +146,10 @@ class Renderer {
 				this.ctx.fill()
 			}
 			else if (obj.type == "text") {
-				this.ctx.font = obj.font
+				this.ctx.font = `bold ${obj.fontSize}px system-ui`
+				if (obj.alignSelf == "center") {
+					this.ctx.translate(-this.ctx.measureText(obj.text).width/2, -obj.fontSize/2)
+				}
 				this.ctx.fillText(obj.text, obj.x, obj.y)
 			}
 			else if (obj.type == "line") {
@@ -204,7 +223,7 @@ class Renderer {
 	}
 	
 	measureText(obj) {
-		this.ctx.font = obj.font
+		this.ctx.font = `bold ${obj.fontSize}px system-ui`
 		return this.ctx.measureText(obj.text)
 	}
 }
