@@ -208,10 +208,12 @@ function startGame() {
 }
 
 function checkDubsky() {
+	if (players.length < 2) return;
 	if (players.filter(a => a.team == "red" && a.alive).length <= 0) {
 		for (const conn of players) {
 			blueDubs++
 			conn.send(JSON.stringify({type: "begin end round", mes: {winner: "blue", dubs: {reds: redDubs, blue: blueDubs}}}))
+			console.log("Blue wins")
 		}
 
 		setTimeout(startGame, 5000)
@@ -220,6 +222,7 @@ function checkDubsky() {
 		for (const conn of players) {
 			redDubs++
 			conn.send(JSON.stringify({type: "begin end round", mes: {winner: "red", dubs: {reds: redDubs, blue: blueDubs}}}))
+			console.log("Red wins")
 		}
 
 		setTimeout(startGame, 5000)
